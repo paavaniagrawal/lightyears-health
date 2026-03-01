@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LightYears Health - Internal Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <style>
+        .card { transition: all 0.2s; }
+        .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; font-weight: 600; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .loading-pulse { animation: pulse 1.5s ease-in-out infinite; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <span class="text-white font-bold text-lg">LY</span>
+                </div>
+                <div>
+                    <h1 class="text-lg font-semibold text-gray-900">LightYears Health</h1>
+                    <p class="text-xs text-gray-500">Protocol Evaluation Dashboard (Internal)</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <button onclick="refreshData()" class="px-4 py-2 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    Refresh
+                </button>
+                <span class="text-xs text-gray-400" id="lastUpdated">Loading...</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-6 py-6">
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+            <div class="card bg-white rounded-xl border border-gray-200 p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Total Enrolled</p>
+                <p class="text-3xl font-bold text-gray-900 mt-1" id="stat_total">-</p>
+            </div>
+            <div class="card bg-white rounded-xl border border-gray-200 p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Active</p>
+                <p class="text-3xl font-bold text-green-600 mt-1" id="stat_active">-</p>
+            </div>
+            <div class="card bg-white rounded-xl border border-gray-200 p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Completed</p>
+                <p class="text-3xl font-bold text-blue-600 mt-1" id="stat_completed">-</p>
+            </div>
+            <div class="card bg-white rounded-xl border border-gray-200 p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Dropped Off</p>
+                <p class="text-3xl font-bold text-red-500 mt-1" id="stat_dropped">-</p>
+            </div>
+            <div class="card bg-white rounded-xl border border-gray-200 p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Completion Rate</p>
+                <p class="text-3xl font-bold text-gray-900 mt-1" id="stat_completion_rate">-</p>
+            </div>
+            <div class="card bg-white rounded-xl border border-gray-200 p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Drop-off Rate</p>
+                <p class="text-3xl font-bold text-gray-900 mt-1" id="stat_dropout_rate">-</p>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-200 mb-6 gap-6">
+            <button class="tab-active pb-3 text-sm cursor-pointer" onclick="switchTab('overview', this)" id="tab_overview">Overview</button>
+            <button class="pb-3 text-sm text-gray-500 cursor-pointer hover:text-gray-700" onclick="switchTab('users', this)" id="tab_users">Users</button>
+            <button class="pb-3 text-sm text-gray-500 cursor-pointer hover:text-gray-700" onclick="switchTab('escalations', this)" id="tab_escalations">
+                Escalations <span id="escalation_badge" class="hidden ml-1 px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">0</span>
+            </button>
+            <button class="pb-3 text-sm text-gray-500 cursor-pointer hover:text-gray-700" onclick="switchTab('messages', this)" id="tab_messages">Messages</button>
+        </div>
+
+        <!-- TAB: Overview -->
+        <div id="panel_overview">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Pain Score Trend Chart -->
+                <div class="bg-white rounded-xl border border-gray-200 p-6">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-4">Pain Score Trend Over Time</h3>
+                    <div class="h-64">
+                        <canvas id="painTrendChart"></canvas>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">Shows pain score progression across check-in weeks (lower is better)</p>
+                </div>
+
+                <!-- Stage Distribution -->
+                <div class="bg-white rounded-xl border border-gray-200 p-6">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-4">Program Stage Distribution</h3>
+                    <div class="h-64 flex items-center justify-center">
+                        <canvas id="stageChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Check-in Completion -->
+                <div class="bg-white rounded-xl border border-gray-200 p-6">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-4">Check-in Completion Rate</h3>
+                    <div class="h-64">
+                        <canvas id="checkinChart"></canvas>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">Percentage of expected biweekly check-ins completed per user</p>
+                </div>
+
+                <!-- Exercise Adherence -->
+                <div class="bg-white rounded-xl border border-gray-200 p-6">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-4">Key Clinical Metrics</h3>
+                    <div class="space-y-4 mt-2">
+                        <div class="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                            <span class="text-sm text-gray-700">Avg. Pain Reduction</span>
+                            <span class="text-lg font-bold text-green-700" id="metric_pain_reduction">-</span>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
+                            <span class="text-sm text-gray-700">Avg. Baseline Pain Score</span>
+                            <span class="text-lg font-bold text-blue-700" id="metric_avg_baseline">-</span>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-purple-50 rounded-lg">
+                            <span class="text-sm text-gray-700">Avg. Latest Pain Score</span>
+                            <span class="text-lg font-bold text-purple-700" id="metric_avg_latest">-</span>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-amber-50 rounded-lg">
+                            <span class="text-sm text-gray-700">Avg. Check-in Rate</span>
+                            <span class="text-lg font-bold text-amber-700" id="metric_avg_checkin">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Users -->
+        <div id="panel_users" class="hidden">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                    <h3 class="text-sm font-semibold text-gray-700">All Program Participants</h3>
+                    <span class="text-xs text-gray-400" id="user_count">0 users</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Name</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Phone</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Stage</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Week</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Baseline Pain</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Latest Pain</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Check-ins</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Enrolled</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody" class="divide-y divide-gray-100">
+                            <tr><td colspan="9" class="px-6 py-8 text-center text-gray-400">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Escalations -->
+        <div id="panel_escalations" class="hidden">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100">
+                    <h3 class="text-sm font-semibold text-gray-700">Open Escalations</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Severity</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">User</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Reason</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Week</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Created</th>
+                            </tr>
+                        </thead>
+                        <tbody id="escalationsTableBody" class="divide-y divide-gray-100">
+                            <tr><td colspan="6" class="px-6 py-8 text-center text-gray-400">No open escalations</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Messages -->
+        <div id="panel_messages" class="hidden">
+            <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100">
+                    <h3 class="text-sm font-semibold text-gray-700">Recent Messages</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Direction</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Type</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Summary</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Sent</th>
+                            </tr>
+                        </thead>
+                        <tbody id="messagesTableBody" class="divide-y divide-gray-100">
+                            <tr><td colspan="5" class="px-6 py-8 text-center text-gray-400">No messages yet</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="hidden text-center py-16">
+            <div class="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-700 mb-2">No data yet</h3>
+            <p class="text-gray-500 text-sm max-w-md mx-auto">Submit an intake form and run the demo workflow to see data here. Use the "LY - Demo: Boss Demo Fast-Forward" workflow in n8n to populate 12 weeks of sample data instantly.</p>
+        </div>
+
+    </main>
+
+    <script>
+        // ==========================================
+        // SUPABASE CONFIG
+        // ==========================================
+        const SUPABASE_URL = 'https://ycswtvovrdkbfchjjaio.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inljc3d0dm92cmRrYmZjaGpqYWlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNDAzMjMsImV4cCI6MjA4NzkxNjMyM30.i1V8j18bTkWDhSF_hxFwxLm5wQDtDT8AyJCOarXViEw';
+
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Chart instances
+        let painChart, stageChart, checkinChart;
+
+        // ==========================================
+        // TAB SWITCHING
+        // ==========================================
+        function switchTab(tab, el) {
+            document.querySelectorAll('[id^="panel_"]').forEach(p => p.classList.add('hidden'));
+            document.querySelectorAll('[id^="tab_"]').forEach(t => { t.classList.remove('tab-active'); t.classList.add('text-gray-500'); });
+            document.getElementById(`panel_${tab}`).classList.remove('hidden');
+            el.classList.add('tab-active');
+            el.classList.remove('text-gray-500');
+        }
+
+        // ==========================================
+        // DATA FETCHING
+        // ==========================================
+        async function refreshData() {
+            document.getElementById('lastUpdated').textContent = 'Refreshing...';
+            try {
+                await Promise.all([
+                    loadSummary(),
+                    loadPainTrend(),
+                    loadStageDistribution(),
+                    loadCheckinCompletion(),
+                    loadUsers(),
+                    loadEscalations(),
+                    loadMessages(),
+                    loadClinicalMetrics()
+                ]);
+                document.getElementById('lastUpdated').textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+            } catch (err) {
+                console.error('Refresh error:', err);
+                document.getElementById('lastUpdated').textContent = 'Error loading data';
+            }
+        }
+
+        // ==========================================
+        // SUMMARY STATS
+        // ==========================================
+        async function loadSummary() {
+            const { data, error } = await supabase.from('v_program_summary').select('*');
+            if (error || !data || data.length === 0) {
+                document.getElementById('emptyState').classList.remove('hidden');
+                return;
+            }
+            const s = data[0];
+            document.getElementById('stat_total').textContent = s.total_enrollments || 0;
+            document.getElementById('stat_active').textContent = s.active_users || 0;
+            document.getElementById('stat_completed').textContent = s.completed_users || 0;
+            document.getElementById('stat_dropped').textContent = s.dropped_off_users || 0;
+            document.getElementById('stat_completion_rate').textContent = s.completion_rate_pct !== null ? s.completion_rate_pct + '%' : '-';
+            document.getElementById('stat_dropout_rate').textContent = s.dropout_rate_pct !== null ? s.dropout_rate_pct + '%' : '-';
+
+            if (s.total_enrollments > 0) {
+                document.getElementById('emptyState').classList.add('hidden');
+            }
+        }
+
+        // ==========================================
+        // PAIN TREND CHART
+        // ==========================================
+        async function loadPainTrend() {
+            const { data, error } = await supabase.from('v_pain_score_trend').select('*').order('week_number');
+            if (error || !data || data.length === 0) return;
+
+            // Group by user
+            const userMap = {};
+            data.forEach(d => {
+                if (!userMap[d.user_id]) userMap[d.user_id] = { name: d.name, points: [] };
+                userMap[d.user_id].points.push({ week: d.week_number, score: d.pain_score });
+            });
+
+            const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+            const datasets = Object.values(userMap).map((user, i) => ({
+                label: user.name,
+                data: user.points.map(p => ({ x: p.week, y: p.score })),
+                borderColor: colors[i % colors.length],
+                backgroundColor: colors[i % colors.length] + '20',
+                tension: 0.3,
+                fill: false,
+                pointRadius: 5
+            }));
+
+            if (painChart) painChart.destroy();
+            painChart = new Chart(document.getElementById('painTrendChart'), {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: 'Week' }, min: 0, max: 12, ticks: { stepSize: 2 } },
+                        y: { title: { display: true, text: 'Pain Score' }, min: 0, max: 10 }
+                    },
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } }
+                }
+            });
+        }
+
+        // ==========================================
+        // STAGE DISTRIBUTION
+        // ==========================================
+        async function loadStageDistribution() {
+            const { data, error } = await supabase.from('program_enrollments').select('stage');
+            if (error || !data || data.length === 0) return;
+
+            const counts = { pain_management: 0, recovery: 0, strengthening: 0 };
+            data.forEach(d => { if (counts.hasOwnProperty(d.stage)) counts[d.stage]++; });
+
+            if (stageChart) stageChart.destroy();
+            stageChart = new Chart(document.getElementById('stageChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Pain Management (7+)', 'Recovery (4-6)', 'Strengthening (0-3)'],
+                    datasets: [{ data: [counts.pain_management, counts.recovery, counts.strengthening],
+                        backgroundColor: ['#ef4444', '#f59e0b', '#10b981'], borderWidth: 0 }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } }
+                }
+            });
+        }
+
+        // ==========================================
+        // CHECK-IN COMPLETION
+        // ==========================================
+        async function loadCheckinCompletion() {
+            const { data, error } = await supabase.from('v_checkin_completion').select('*');
+            if (error || !data || data.length === 0) return;
+
+            if (checkinChart) checkinChart.destroy();
+            checkinChart = new Chart(document.getElementById('checkinChart'), {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.name || 'Unknown'),
+                    datasets: [{
+                        label: 'Completion Rate (%)',
+                        data: data.map(d => d.completion_rate_pct || 0),
+                        backgroundColor: data.map(d => {
+                            const r = d.completion_rate_pct || 0;
+                            return r >= 75 ? '#10b981' : r >= 50 ? '#f59e0b' : '#ef4444';
+                        }),
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { min: 0, max: 100, title: { display: true, text: '%' } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // ==========================================
+        // CLINICAL METRICS
+        // ==========================================
+        async function loadClinicalMetrics() {
+            const { data: trends } = await supabase.from('v_pain_score_trend').select('*');
+            const { data: checkins } = await supabase.from('v_checkin_completion').select('*');
+
+            if (trends && trends.length > 0) {
+                // Group by user, get baseline and latest
+                const userMetrics = {};
+                trends.forEach(t => {
+                    if (!userMetrics[t.user_id]) userMetrics[t.user_id] = { baseline: t.baseline_pain_score, scores: [] };
+                    userMetrics[t.user_id].scores.push(t.pain_score);
+                });
+
+                const users = Object.values(userMetrics);
+                const avgBaseline = users.reduce((s, u) => s + (u.baseline || 0), 0) / users.length;
+                const avgLatest = users.reduce((s, u) => s + (u.scores[u.scores.length - 1] || 0), 0) / users.length;
+                const avgReduction = avgBaseline - avgLatest;
+
+                document.getElementById('metric_avg_baseline').textContent = avgBaseline.toFixed(1) + '/10';
+                document.getElementById('metric_avg_latest').textContent = avgLatest.toFixed(1) + '/10';
+                document.getElementById('metric_pain_reduction').textContent = (avgReduction > 0 ? '-' : '') + avgReduction.toFixed(1) + ' pts';
+            }
+
+            if (checkins && checkins.length > 0) {
+                const avgRate = checkins.reduce((s, c) => s + (c.completion_rate_pct || 0), 0) / checkins.length;
+                document.getElementById('metric_avg_checkin').textContent = avgRate.toFixed(0) + '%';
+            }
+        }
+
+        // ==========================================
+        // USERS TABLE
+        // ==========================================
+        async function loadUsers() {
+            const { data: enrollments } = await supabase
+                .from('program_enrollments')
+                .select('*, users(*)')
+                .order('created_at', { ascending: false });
+
+            const { data: intakes } = await supabase.from('intake_responses').select('*');
+            const { data: metrics } = await supabase.from('health_metrics').select('*').eq('metric_type', 'pain_score').order('week_number', { ascending: false });
+            const { data: checkins } = await supabase.from('v_checkin_completion').select('*');
+
+            if (!enrollments || enrollments.length === 0) {
+                document.getElementById('usersTableBody').innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-gray-400">No users enrolled yet</td></tr>';
+                document.getElementById('user_count').textContent = '0 users';
+                return;
+            }
+
+            document.getElementById('user_count').textContent = `${enrollments.length} users`;
+
+            // Build lookup maps
+            const intakeMap = {};
+            (intakes || []).forEach(i => { intakeMap[i.user_id] = i; });
+            const latestMetric = {};
+            (metrics || []).forEach(m => { if (!latestMetric[m.user_id]) latestMetric[m.user_id] = m; });
+            const checkinMap = {};
+            (checkins || []).forEach(c => { checkinMap[c.enrollment_id] = c; });
+
+            const statusColors = {
+                enrolled: 'bg-gray-100 text-gray-700',
+                active: 'bg-green-100 text-green-700',
+                completed: 'bg-blue-100 text-blue-700',
+                dropped_off: 'bg-red-100 text-red-700'
+            };
+
+            const stageLabels = {
+                pain_management: 'Pain Mgmt',
+                recovery: 'Recovery',
+                strengthening: 'Strengthening'
+            };
+
+            const rows = enrollments.map(e => {
+                const intake = intakeMap[e.user_id] || {};
+                const latest = latestMetric[e.user_id];
+                const checkin = checkinMap[e.id];
+                const baselinePain = intake.pain_score !== undefined ? intake.pain_score : '-';
+                const latestPain = latest ? latest.value : '-';
+                const checkinRate = checkin ? `${checkin.total_checkins}/${checkin.expected_checkins}` : '-';
+
+                return `<tr class="hover:bg-gray-50">
+                    <td class="px-6 py-3 font-medium text-gray-900">${e.users?.name || '-'}</td>
+                    <td class="px-6 py-3 text-gray-500">${e.users?.phone || '-'}</td>
+                    <td class="px-6 py-3"><span class="text-xs">${stageLabels[e.stage] || e.stage}</span></td>
+                    <td class="px-6 py-3"><span class="px-2 py-1 rounded-full text-xs font-medium ${statusColors[e.status] || 'bg-gray-100'}">${e.status}</span></td>
+                    <td class="px-6 py-3">${e.current_week}/12</td>
+                    <td class="px-6 py-3">${baselinePain}/10</td>
+                    <td class="px-6 py-3 ${typeof latestPain === 'number' && latestPain < baselinePain ? 'text-green-600 font-medium' : ''}">${latestPain !== '-' ? latestPain + '/10' : '-'}</td>
+                    <td class="px-6 py-3">${checkinRate}</td>
+                    <td class="px-6 py-3 text-gray-400 text-xs">${e.created_at ? new Date(e.created_at).toLocaleDateString() : '-'}</td>
+                </tr>`;
+            }).join('');
+
+            document.getElementById('usersTableBody').innerHTML = rows;
+        }
+
+        // ==========================================
+        // ESCALATIONS TABLE
+        // ==========================================
+        async function loadEscalations() {
+            const { data } = await supabase.from('v_escalation_queue').select('*');
+            if (!data || data.length === 0) {
+                document.getElementById('escalationsTableBody').innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-green-500">No open escalations - all clear!</td></tr>';
+                document.getElementById('escalation_badge').classList.add('hidden');
+                return;
+            }
+
+            document.getElementById('escalation_badge').textContent = data.length;
+            document.getElementById('escalation_badge').classList.remove('hidden');
+
+            const severityColors = { high: 'bg-red-100 text-red-700', medium: 'bg-amber-100 text-amber-700', low: 'bg-yellow-100 text-yellow-700' };
+            const rows = data.map(e => `<tr class="hover:bg-gray-50">
+                <td class="px-6 py-3"><span class="px-2 py-1 rounded-full text-xs font-medium ${severityColors[e.severity] || 'bg-gray-100'}">${e.severity}</span></td>
+                <td class="px-6 py-3 font-medium">${e.name}</td>
+                <td class="px-6 py-3 text-gray-600">${e.trigger_reason.replace(/_/g, ' ')}</td>
+                <td class="px-6 py-3">Week ${e.current_week || '-'}</td>
+                <td class="px-6 py-3"><span class="status-dot bg-amber-400"></span> ${e.status}</td>
+                <td class="px-6 py-3 text-gray-400 text-xs">${new Date(e.created_at).toLocaleString()}</td>
+            </tr>`).join('');
+
+            document.getElementById('escalationsTableBody').innerHTML = rows;
+        }
+
+        // ==========================================
+        // MESSAGES TABLE
+        // ==========================================
+        async function loadMessages() {
+            const { data } = await supabase.from('message_log').select('*, users(name)').order('sent_at', { ascending: false }).limit(50);
+            if (!data || data.length === 0) {
+                document.getElementById('messagesTableBody').innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-gray-400">No messages sent yet</td></tr>';
+                return;
+            }
+
+            const dirIcons = { outbound: '<span class="text-blue-500">&#8593; Out</span>', inbound: '<span class="text-green-500">&#8595; In</span>' };
+            const rows = data.map(m => `<tr class="hover:bg-gray-50">
+                <td class="px-6 py-3">${dirIcons[m.direction] || m.direction}</td>
+                <td class="px-6 py-3"><span class="px-2 py-1 bg-gray-100 rounded text-xs">${m.message_type || '-'}</span></td>
+                <td class="px-6 py-3 text-gray-600 text-xs max-w-xs truncate">${m.content_summary || '-'}</td>
+                <td class="px-6 py-3"><span class="text-xs">${m.delivery_status}</span></td>
+                <td class="px-6 py-3 text-gray-400 text-xs">${new Date(m.sent_at).toLocaleString()}</td>
+            </tr>`).join('');
+
+            document.getElementById('messagesTableBody').innerHTML = rows;
+        }
+
+        // ==========================================
+        // INITIALIZE
+        // ==========================================
+        refreshData();
+        // Auto-refresh every 30 seconds
+        setInterval(refreshData, 30000);
+    </script>
+</body>
+</html>

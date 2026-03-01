@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LightYears Health - Knee Pain Assessment</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 28px; height: 28px; border-radius: 50%; background: #2563eb; cursor: pointer; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        .slider::-moz-range-thumb { width: 28px; height: 28px; border-radius: 50%; background: #2563eb; cursor: pointer; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+        .slider { -webkit-appearance: none; appearance: none; height: 8px; border-radius: 4px; outline: none; }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .step-hidden { display: none; }
+        .pain-label { transition: all 0.2s; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div class="max-w-2xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-brand-600 rounded-lg flex items-center justify-center">
+                    <span class="text-white font-bold text-lg">LY</span>
+                </div>
+                <div>
+                    <h1 class="text-lg font-semibold text-gray-900">LightYears Health</h1>
+                    <p class="text-xs text-gray-500">Knee Pain Recovery Program</p>
+                </div>
+            </div>
+            <div class="text-sm text-gray-400" id="stepIndicator">Step 1 of 3</div>
+        </div>
+        <!-- Progress bar -->
+        <div class="h-1 bg-gray-100">
+            <div id="progressBar" class="h-full bg-brand-600 transition-all duration-500" style="width: 33%"></div>
+        </div>
+    </header>
+
+    <!-- Form Container -->
+    <main class="max-w-2xl mx-auto px-6 py-8">
+
+        <form id="intakeForm" onsubmit="return false;">
+
+            <!-- STEP 1: Personal Info -->
+            <div id="step1" class="fade-in">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Let's start with your details</h2>
+                <p class="text-gray-500 mb-8">This helps us personalize your recovery program.</p>
+
+                <div class="space-y-5">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">Full Name *</label>
+                        <input type="text" id="name" required placeholder="Enter your full name"
+                            class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition" />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">Phone Number (WhatsApp) *</label>
+                        <div class="flex gap-2">
+                            <span class="px-4 py-3 bg-gray-100 rounded-xl border border-gray-300 text-gray-600 text-sm flex items-center">+91</span>
+                            <input type="tel" id="phone" required placeholder="9876543210" pattern="[0-9]{10}" maxlength="10"
+                                class="flex-1 px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition" />
+                        </div>
+                        <p class="text-xs text-gray-400 mt-1">Your recovery program will be delivered via WhatsApp</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+                        <input type="email" id="email" placeholder="your@email.com"
+                            class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition" />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">Age *</label>
+                        <input type="number" id="age" required min="18" max="100" placeholder="e.g. 45"
+                            class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition" />
+                    </div>
+                </div>
+
+                <div class="mt-8 flex justify-end">
+                    <button type="button" onclick="goToStep(2)"
+                        class="px-8 py-3 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 transition shadow-sm">
+                        Continue &rarr;
+                    </button>
+                </div>
+            </div>
+
+            <!-- STEP 2: Pain Assessment -->
+            <div id="step2" class="step-hidden fade-in">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">About your knee pain</h2>
+                <p class="text-gray-500 mb-8">Help us understand your current condition.</p>
+
+                <div class="space-y-6">
+                    <!-- Pain Score Slider -->
+                    <div class="bg-white rounded-2xl border border-gray-200 p-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-4">
+                            How would you rate your knee pain? *
+                        </label>
+                        <div class="flex justify-between mb-2 text-xs text-gray-400">
+                            <span>No pain</span>
+                            <span>Excruciating</span>
+                        </div>
+                        <input type="range" id="pain_score" min="0" max="10" value="5"
+                            class="slider w-full bg-gradient-to-r from-green-300 via-yellow-300 to-red-400 rounded-lg"
+                            oninput="updatePainDisplay(this.value)" />
+                        <div class="flex justify-between mt-1">
+                            <span class="text-xs text-gray-300">0</span>
+                            <span class="text-xs text-gray-300">1</span>
+                            <span class="text-xs text-gray-300">2</span>
+                            <span class="text-xs text-gray-300">3</span>
+                            <span class="text-xs text-gray-300">4</span>
+                            <span class="text-xs text-gray-300">5</span>
+                            <span class="text-xs text-gray-300">6</span>
+                            <span class="text-xs text-gray-300">7</span>
+                            <span class="text-xs text-gray-300">8</span>
+                            <span class="text-xs text-gray-300">9</span>
+                            <span class="text-xs text-gray-300">10</span>
+                        </div>
+                        <div class="text-center mt-4">
+                            <span id="painValue" class="text-4xl font-bold text-brand-600">5</span>
+                            <span class="text-gray-400 text-lg">/10</span>
+                            <p id="painLabel" class="text-sm text-gray-500 mt-1">Moderate pain</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                            What activities make your knee pain worse? *
+                        </label>
+                        <textarea id="pain_aggravators" required rows="2" placeholder="e.g. Climbing stairs, running, squatting, sitting for long periods..."
+                            class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition resize-none"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                            What activities make your knee pain better?
+                        </label>
+                        <textarea id="pain_relievers" rows="2" placeholder="e.g. Rest, ice, elevation, gentle walking..."
+                            class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition resize-none"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                            What activities would you like to perform without knee pain? *
+                        </label>
+                        <textarea id="functional_goals" required rows="2" placeholder="e.g. Walk without discomfort, play with my kids, climb stairs, return to jogging..."
+                            class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition resize-none"></textarea>
+                    </div>
+                </div>
+
+                <div class="mt-8 flex justify-between">
+                    <button type="button" onclick="goToStep(1)"
+                        class="px-6 py-3 border border-gray-300 text-gray-600 rounded-xl font-medium hover:bg-gray-50 transition">
+                        &larr; Back
+                    </button>
+                    <button type="button" onclick="goToStep(3)"
+                        class="px-8 py-3 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 transition shadow-sm">
+                        Continue &rarr;
+                    </button>
+                </div>
+            </div>
+
+            <!-- STEP 3: Medical History -->
+            <div id="step3" class="step-hidden fade-in">
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Medical background</h2>
+                <p class="text-gray-500 mb-8">This ensures your program is safe and appropriate for you.</p>
+
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-3">
+                            Do you have any of the following conditions? (Select all that apply)
+                        </label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <label class="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-brand-300 cursor-pointer transition">
+                                <input type="checkbox" name="comorbidity" value="Diabetes" class="w-4 h-4 text-brand-600 rounded" />
+                                <span class="text-sm text-gray-700">Diabetes</span>
+                            </label>
+                            <label class="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-brand-300 cursor-pointer transition">
+                                <input type="checkbox" name="comorbidity" value="Hypertension" class="w-4 h-4 text-brand-600 rounded" />
+                                <span class="text-sm text-gray-700">Hypertension</span>
+                            </label>
+                            <label class="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-brand-300 cursor-pointer transition">
+                                <input type="checkbox" name="comorbidity" value="Thyroid disorder" class="w-4 h-4 text-brand-600 rounded" />
+                                <span class="text-sm text-gray-700">Thyroid disorder</span>
+                            </label>
+                            <label class="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-brand-300 cursor-pointer transition">
+                                <input type="checkbox" name="comorbidity" value="Heart condition" class="w-4 h-4 text-brand-600 rounded" />
+                                <span class="text-sm text-gray-700">Heart condition</span>
+                            </label>
+                            <label class="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-brand-300 cursor-pointer transition col-span-2">
+                                <input type="checkbox" name="comorbidity" value="None" class="w-4 h-4 text-brand-600 rounded" />
+                                <span class="text-sm text-gray-700">None of the above</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                            Any relevant medical or surgical history?
+                        </label>
+                        <textarea id="medical_history" rows="2" placeholder="e.g. Previous knee surgery, ligament injury, arthroscopy, etc. Write 'None' if not applicable."
+                            class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition resize-none"></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1.5">Vitamin D3 Level</label>
+                            <select id="blood_marker_d3"
+                                class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition bg-white">
+                                <option value="unknown">Don't know</option>
+                                <option value="low">Low / Deficient</option>
+                                <option value="normal">Normal</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1.5">Vitamin B12 Level</label>
+                            <select id="blood_marker_b12"
+                                class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition bg-white">
+                                <option value="unknown">Don't know</option>
+                                <option value="low">Low / Deficient</option>
+                                <option value="normal">Normal</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-400 -mt-3">If you've had recent blood work, this helps us tailor your nutraceutical recommendation.</p>
+                </div>
+
+                <div class="mt-8 flex justify-between">
+                    <button type="button" onclick="goToStep(2)"
+                        class="px-6 py-3 border border-gray-300 text-gray-600 rounded-xl font-medium hover:bg-gray-50 transition">
+                        &larr; Back
+                    </button>
+                    <button type="button" onclick="submitForm()" id="submitBtn"
+                        class="px-8 py-3 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 transition shadow-sm">
+                        Submit Assessment
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <!-- RESULT SCREEN -->
+        <div id="resultScreen" class="step-hidden fade-in">
+            <div class="text-center py-8">
+                <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Assessment Complete!</h2>
+                <p class="text-gray-500 mb-8">Here's your personalized recommendation</p>
+            </div>
+
+            <div id="resultContent" class="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
+                <!-- Filled dynamically -->
+            </div>
+
+            <div id="resultNote" class="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                <p class="text-sm text-blue-700">
+                    <strong>What happens next?</strong> After purchasing your recovery bundle, you'll receive a WhatsApp message to begin your 12-week structured program with exercises, check-ins, and progress tracking.
+                </p>
+            </div>
+        </div>
+
+        <!-- LOADING SCREEN -->
+        <div id="loadingScreen" class="step-hidden fade-in">
+            <div class="text-center py-16">
+                <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-brand-200 border-t-brand-600 mb-4"></div>
+                <p class="text-gray-500">Analyzing your responses...</p>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // ==========================================
+        // CONFIGURATION
+        // ==========================================
+        const WEBHOOK_URL = 'https://parag16.app.n8n.cloud/webhook/lightyears-intake';
+
+        // ==========================================
+        // STEP NAVIGATION
+        // ==========================================
+        let currentStep = 1;
+
+        function goToStep(step) {
+            // Validate current step before advancing
+            if (step > currentStep && !validateStep(currentStep)) return;
+
+            document.getElementById(`step${currentStep}`).classList.add('step-hidden');
+            document.getElementById(`step${step}`).classList.remove('step-hidden');
+            currentStep = step;
+
+            document.getElementById('stepIndicator').textContent = `Step ${step} of 3`;
+            document.getElementById('progressBar').style.width = `${(step / 3) * 100}%`;
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function validateStep(step) {
+            if (step === 1) {
+                const name = document.getElementById('name').value.trim();
+                const phone = document.getElementById('phone').value.trim();
+                const age = document.getElementById('age').value;
+                if (!name) { alert('Please enter your name.'); return false; }
+                if (!phone || phone.length !== 10) { alert('Please enter a valid 10-digit phone number.'); return false; }
+                if (!age || age < 18 || age > 100) { alert('Please enter a valid age (18-100).'); return false; }
+                return true;
+            }
+            if (step === 2) {
+                const aggravators = document.getElementById('pain_aggravators').value.trim();
+                const goals = document.getElementById('functional_goals').value.trim();
+                if (!aggravators) { alert('Please describe what makes your knee pain worse.'); return false; }
+                if (!goals) { alert('Please describe your functional goals.'); return false; }
+                return true;
+            }
+            return true;
+        }
+
+        // ==========================================
+        // PAIN SCORE DISPLAY
+        // ==========================================
+        function updatePainDisplay(value) {
+            const v = parseInt(value);
+            document.getElementById('painValue').textContent = v;
+            const labels = {
+                0: 'No pain', 1: 'Minimal pain', 2: 'Mild pain', 3: 'Mild pain',
+                4: 'Moderate pain', 5: 'Moderate pain', 6: 'Moderate pain',
+                7: 'Severe pain', 8: 'Severe pain', 9: 'Very severe pain', 10: 'Excruciating pain'
+            };
+            const colors = v <= 3 ? 'text-green-600' : v <= 6 ? 'text-yellow-600' : 'text-red-600';
+            const el = document.getElementById('painValue');
+            el.className = `text-4xl font-bold ${colors}`;
+            document.getElementById('painLabel').textContent = labels[v];
+        }
+
+        // ==========================================
+        // FORM SUBMISSION
+        // ==========================================
+        async function submitForm() {
+            if (!validateStep(3)) return;
+
+            // Gather comorbidities
+            const comorbidityChecks = document.querySelectorAll('input[name="comorbidity"]:checked');
+            const comorbidities = Array.from(comorbidityChecks).map(c => c.value).join(', ');
+
+            // Build payload
+            const payload = {
+                name: document.getElementById('name').value.trim(),
+                phone: '+91' + document.getElementById('phone').value.trim(),
+                email: document.getElementById('email').value.trim(),
+                age: parseInt(document.getElementById('age').value),
+                pain_score: parseInt(document.getElementById('pain_score').value),
+                pain_aggravators: document.getElementById('pain_aggravators').value.trim(),
+                pain_relievers: document.getElementById('pain_relievers').value.trim(),
+                functional_goals: document.getElementById('functional_goals').value.trim(),
+                comorbidities: comorbidities || 'None reported',
+                medical_history: document.getElementById('medical_history').value.trim() || 'None reported',
+                blood_marker_d3: document.getElementById('blood_marker_d3').value,
+                blood_marker_b12: document.getElementById('blood_marker_b12').value,
+                source: 'intake_form'
+            };
+
+            // Show loading
+            document.getElementById('step3').classList.add('step-hidden');
+            document.getElementById('loadingScreen').classList.remove('step-hidden');
+            document.getElementById('stepIndicator').textContent = 'Processing...';
+            document.getElementById('progressBar').style.width = '100%';
+
+            try {
+                const response = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                showResult(result, payload);
+            } catch (error) {
+                console.error('Submission error:', error);
+                // Show result with local classification as fallback
+                const localResult = classifyLocally(payload);
+                showResult(localResult, payload);
+            }
+        }
+
+        // Local classification fallback (mirrors n8n logic)
+        function classifyLocally(payload) {
+            const ps = payload.pain_score;
+            let stage, eligibility;
+
+            if (ps <= 3) { stage = 'strengthening'; }
+            else if (ps <= 6) { stage = 'recovery'; }
+            else { stage = 'pain_management'; }
+
+            const redFlags = ['surgery', 'fracture', 'tumor', 'cancer', 'infection', 'ligament tear', 'acl', 'mcl'];
+            const hasRedFlag = redFlags.some(f =>
+                (payload.medical_history || '').toLowerCase().includes(f) ||
+                (payload.comorbidities || '').toLowerCase().includes(f)
+            );
+
+            if (hasRedFlag || ps >= 9) { eligibility = 'redirect_professional'; }
+            else if (ps >= 7 || payload.age >= 65) { eligibility = 'consultation'; }
+            else { eligibility = 'self_guided'; }
+
+            return { stage, eligibility };
+        }
+
+        function showResult(result, payload) {
+            document.getElementById('loadingScreen').classList.add('step-hidden');
+            document.getElementById('resultScreen').classList.remove('step-hidden');
+            document.getElementById('stepIndicator').textContent = 'Complete';
+
+            const stage = result.stage || 'recovery';
+            const eligibility = result.eligibility || 'self_guided';
+
+            const stageInfo = {
+                strengthening: {
+                    label: 'Strengthening Program',
+                    color: 'green',
+                    desc: 'Your pain level indicates you are ready for an active strengthening program.',
+                    exercises: 'Squat variations, step ups, supported split squats, RDLs, single leg sit to stand, planks'
+                },
+                recovery: {
+                    label: 'Recovery Program',
+                    color: 'yellow',
+                    desc: 'Your pain level indicates a structured recovery program focused on gentle strengthening and mobility.',
+                    exercises: 'Bridge variations, clam shells, wall supported squats, hip mobility, core activation, resistance band work'
+                },
+                pain_management: {
+                    label: 'Pain Management Program',
+                    color: 'red',
+                    desc: 'Your pain level indicates we should start with gentle pain management exercises.',
+                    exercises: 'Quad sets, straight leg raises, heel slides, hamstring curls, standard bridge, hip mobility, pelvic tilts'
+                }
+            };
+
+            const info = stageInfo[stage] || stageInfo.recovery;
+            const colorMap = { green: { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700', badge: 'bg-green-100 text-green-800' },
+                               yellow: { bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-700', badge: 'bg-yellow-100 text-yellow-800' },
+                               red: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', badge: 'bg-red-100 text-red-800' } };
+            const c = colorMap[info.color];
+
+            let html = `
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-900">Your Program</h3>
+                    <span class="px-3 py-1 rounded-full text-xs font-medium ${c.badge}">${info.label}</span>
+                </div>
+                <p class="text-gray-600 text-sm">${info.desc}</p>
+                <div class="${c.bg} ${c.border} border rounded-xl p-4">
+                    <p class="text-sm font-medium ${c.text} mb-1">Recommended Exercises</p>
+                    <p class="text-sm text-gray-600">${info.exercises}</p>
+                </div>
+                <div class="pt-2 border-t border-gray-100">
+                    <p class="text-sm text-gray-500"><strong>Pain Score:</strong> ${payload.pain_score}/10</p>
+                    <p class="text-sm text-gray-500"><strong>Goals:</strong> ${payload.functional_goals}</p>
+                </div>
+            `;
+
+            if (eligibility === 'redirect_professional') {
+                html += `
+                    <div class="bg-red-50 border border-red-200 rounded-xl p-4 mt-2">
+                        <p class="text-sm font-medium text-red-700">Important Recommendation</p>
+                        <p class="text-sm text-red-600 mt-1">Based on your responses, we strongly recommend consulting with an orthopaedic specialist or physiotherapist in person before starting any exercise program.</p>
+                    </div>
+                `;
+                document.getElementById('resultNote').innerHTML = `
+                    <p class="text-sm text-red-700"><strong>Next step:</strong> Please consult with a healthcare professional. Our team will reach out to help connect you with the right specialist.</p>
+                `;
+            } else if (eligibility === 'consultation') {
+                html += `
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-2">
+                        <p class="text-sm font-medium text-amber-700">Consultation Recommended</p>
+                        <p class="text-sm text-amber-600 mt-1">We recommend a brief consultation with our physiotherapy team to ensure the program is tailored to your needs. You can still begin with the gentle exercises above.</p>
+                    </div>
+                `;
+            }
+
+            document.getElementById('resultContent').innerHTML = html;
+        }
+
+        // Initialize
+        updatePainDisplay(5);
+    </script>
+</body>
+</html>
