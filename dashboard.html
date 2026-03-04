@@ -424,7 +424,7 @@
         // USERS TABLE
         // ==========================================
         async function loadUsers() {
-            const { data: enrollments } = await supabase
+            const { data: enrollments } = await db
                 .from('program_enrollments')
                 .select('*, users(*)')
                 .order('created_at', { ascending: false });
