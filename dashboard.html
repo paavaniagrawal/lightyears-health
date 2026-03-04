@@ -233,7 +233,7 @@
         const SUPABASE_URL = 'https://ycswtvovrdkbfchjjaio.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inljc3d0dm92cmRrYmZjaGpqYWlvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNDAzMjMsImV4cCI6MjA4NzkxNjMyM30.i1V8j18bTkWDhSF_hxFwxLm5wQDtDT8AyJCOarXViEw';
 
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         // Chart instances
         let painChart, stageChart, checkinChart;
@@ -276,7 +276,7 @@
         // SUMMARY STATS
         // ==========================================
         async function loadSummary() {
-            const { data, error } = await supabase.from('v_program_summary').select('*');
+            const { data, error } = await db.from('v_program_summary').select('*');
             if (error || !data || data.length === 0) {
                 document.getElementById('emptyState').classList.remove('hidden');
                 return;
@@ -298,7 +298,7 @@
         // PAIN TREND CHART
         // ==========================================
         async function loadPainTrend() {
-            const { data, error } = await supabase.from('v_pain_score_trend').select('*').order('week_number');
+            const { data, error } = await db.from('v_pain_score_trend').select('*').order('week_number');
             if (error || !data || data.length === 0) return;
 
             // Group by user
@@ -338,7 +338,7 @@
         // STAGE DISTRIBUTION
         // ==========================================
         async function loadStageDistribution() {
-            const { data, error } = await supabase.from('program_enrollments').select('stage');
+            const { data, error } = await db.from('program_enrollments').select('stage');
             if (error || !data || data.length === 0) return;
 
             const counts = { pain_management: 0, recovery: 0, strengthening: 0 };
@@ -363,7 +363,7 @@
         // CHECK-IN COMPLETION
         // ==========================================
         async function loadCheckinCompletion() {
-            const { data, error } = await supabase.from('v_checkin_completion').select('*');
+            const { data, error } = await db.from('v_checkin_completion').select('*');
             if (error || !data || data.length === 0) return;
 
             if (checkinChart) checkinChart.destroy();
@@ -393,8 +393,8 @@
         // CLINICAL METRICS
         // ==========================================
         async function loadClinicalMetrics() {
-            const { data: trends } = await supabase.from('v_pain_score_trend').select('*');
-            const { data: checkins } = await supabase.from('v_checkin_completion').select('*');
+            const { data: trends } = await db.from('v_pain_score_trend').select('*');
+            const { data: checkins } = await db.from('v_checkin_completion').select('*');
 
             if (trends && trends.length > 0) {
                 // Group by user, get baseline and latest
@@ -429,9 +429,9 @@
                 .select('*, users(*)')
                 .order('created_at', { ascending: false });
 
-            const { data: intakes } = await supabase.from('intake_responses').select('*');
-            const { data: metrics } = await supabase.from('health_metrics').select('*').eq('metric_type', 'pain_score').order('week_number', { ascending: false });
-            const { data: checkins } = await supabase.from('v_checkin_completion').select('*');
+            const { data: intakes } = await db.from('intake_responses').select('*');
+            const { data: metrics } = await db.from('health_metrics').select('*').eq('metric_type', 'pain_score').order('week_number', { ascending: false });
+            const { data: checkins } = await db.from('v_checkin_completion').select('*');
 
             if (!enrollments || enrollments.length === 0) {
                 document.getElementById('usersTableBody').innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-gray-400">No users enrolled yet</td></tr>';
@@ -490,7 +490,7 @@
         // ESCALATIONS TABLE
         // ==========================================
         async function loadEscalations() {
-            const { data } = await supabase.from('v_escalation_queue').select('*');
+            const { data } = await db.from('v_escalation_queue').select('*');
             if (!data || data.length === 0) {
                 document.getElementById('escalationsTableBody').innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-green-500">No open escalations - all clear!</td></tr>';
                 document.getElementById('escalation_badge').classList.add('hidden');
@@ -517,7 +517,7 @@
         // MESSAGES TABLE
         // ==========================================
         async function loadMessages() {
-            const { data } = await supabase.from('message_log').select('*, users(name)').order('sent_at', { ascending: false }).limit(50);
+            const { data } = await db.from('message_log').select('*, users(name)').order('sent_at', { ascending: false }).limit(50);
             if (!data || data.length === 0) {
                 document.getElementById('messagesTableBody').innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-gray-400">No messages sent yet</td></tr>';
                 return;
