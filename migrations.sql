@@ -240,19 +240,26 @@ CREATE POLICY "anon_insert_message_log" ON message_log FOR INSERT TO anon WITH C
 
 -- 6a: Update existing users with city/gender
 UPDATE users SET
-  city = CASE (ROW_NUMBER() OVER (ORDER BY created_at)) % 5
-    WHEN 0 THEN 'Mumbai'
-    WHEN 1 THEN 'Delhi'
-    WHEN 2 THEN 'Bangalore'
-    WHEN 3 THEN 'Pune'
-    WHEN 4 THEN 'Hyderabad'
-  END,
-  gender = CASE (ROW_NUMBER() OVER (ORDER BY created_at)) % 3
-    WHEN 0 THEN 'Male'
-    WHEN 1 THEN 'Female'
-    WHEN 2 THEN 'Male'
-  END
-WHERE city IS NULL;
+  city = sub.city,
+  gender = sub.gender
+FROM (
+  SELECT id,
+    CASE (ROW_NUMBER() OVER (ORDER BY created_at)) % 5
+      WHEN 0 THEN 'Mumbai'
+      WHEN 1 THEN 'Delhi'
+      WHEN 2 THEN 'Bangalore'
+      WHEN 3 THEN 'Pune'
+      WHEN 4 THEN 'Hyderabad'
+    END as city,
+    CASE (ROW_NUMBER() OVER (ORDER BY created_at)) % 3
+      WHEN 0 THEN 'Male'
+      WHEN 1 THEN 'Female'
+      WHEN 2 THEN 'Male'
+    END as gender
+  FROM users
+  WHERE city IS NULL
+) sub
+WHERE users.id = sub.id;
 
 -- 6b: Update existing intake_responses with pain_duration/functional_level
 UPDATE intake_responses SET
