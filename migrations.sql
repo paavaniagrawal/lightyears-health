@@ -326,3 +326,20 @@ WHERE pe.status IN ('active', 'completed')
     SELECT 1 FROM daily_progress dp
     WHERE dp.enrollment_id = pe.id AND dp.day_number = day_num
   );
+
+-- ============================================
+-- MIGRATION 8: Create user_notes table
+-- ============================================
+CREATE TABLE IF NOT EXISTS user_notes (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  note_text TEXT NOT NULL,
+  author_name VARCHAR NOT NULL DEFAULT 'Nutritionist',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE user_notes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Service role full access" ON user_notes FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "anon_read" ON user_notes FOR SELECT TO anon USING (true);
+CREATE POLICY "anon_insert" ON user_notes FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY "anon_delete" ON user_notes FOR DELETE TO anon USING (true);
