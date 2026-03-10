@@ -2,7 +2,7 @@
 
 > **Purpose of this file:** This document is the single source of truth for the LightYears Health MVP. It is written so that any AI assistant or developer can pick up this project with zero prior context and know exactly what has been built, where everything lives, what works, what doesn't, and what's left to do.
 
-> **Last updated:** 2026-03-08
+> **Last updated:** 2026-03-10
 
 ---
 
@@ -73,11 +73,24 @@ This is **NOT a production system**. It's a proof-of-concept demo built to show 
 ### Interakt (WhatsApp)
 - **API Endpoint:** `https://api.interakt.ai/v1/public/message/`
 - **API Key:** Now set in n8n as `INTERAKT_API_KEY` (base64 encoded, ready for Basic auth header)
-- **Active Template:** `wa_superusers_250925` — this template has an **image header component**
-  - When calling this template, you MUST include `"headerValues": ["<image_url>"]` in the payload
-  - Omitting `headerValues` or passing an empty array causes Interakt to return 400: "Media Url is missing for header's image"
-  - Current placeholder image URL used: `https://www.buildquickbots.com/whatsapp/media/sample/jpg/sample01.jpg`
-- **Demo phone number in WF2 & WF6:** `+919167006051`
+- **Demo phone number:** `+919167006051`
+
+#### Registered WhatsApp Templates (5 total, all Meta-approved)
+
+| Template Name | Header Type | headerValues | Used By |
+|---------------|-------------|-------------|---------|
+| `program_enrollment_confirmation` | IMAGE | `["https://paavaniagrawal.github.io/lightyears-health/assets/ly-logo.png"]` | WF1 (Intake Form Processor) |
+| `day_x_exercise_delivery` | IMAGE | `["https://paavaniagrawal.github.io/lightyears-health/assets/ly-logo.png"]` | Daily Exercise Delivery |
+| `daily_program_reminder` | TEXT | `["Knee Recovery"]` | Daily Program Reminder |
+| `weekly_yoga_session_delivery` | NONE | *(not needed)* | Weekly Yoga Session Delivery |
+| `progress_checkin` | TEXT | `["Knee Recovery"]` | Biweekly Check-in Sender |
+
+**Critical: Header type matters!**
+- IMAGE headers need an image URL in `headerValues` — the URL must be publicly accessible (404 = silent delivery failure)
+- TEXT headers need a text value like `["Knee Recovery"]` — sending an image URL as a text header causes silent delivery failure
+- NONE means no `headerValues` needed
+- Interakt API returns `result: true` even when WhatsApp will silently fail to deliver (wrong header type, 404 image URL, etc.)
+- Legacy template `wa_superusers_250925` still exists but is only used in WF2 (demo)
 
 ---
 
@@ -209,6 +222,17 @@ Tracks daily exercise adherence across the 84-day (12-week) program. Used in the
 
 Dummy purchase data for revenue tracking. Single product: "Knee Recovery Bundle" at Rs 3,500. Real Shopify integration would replace this.
 
+#### `user_notes` (**NEW - Added 2026-03-10**)
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID (PK) | Auto-generated |
+| user_id | UUID (FK -> users) | CASCADE delete |
+| note_text | TEXT | NOT NULL |
+| author_name | VARCHAR | Default: 'Nutritionist' |
+| created_at | TIMESTAMPTZ | Auto-set |
+
+Stores nutritionist consultation notes per user. Displayed in the user profile right column with add/delete UI.
+
 ### Database Views (power the dashboard)
 
 1. **`v_program_summary`** — Top-level stats: total enrollments, active, completed, dropped off, completion rate %, dropout rate %, **total_revenue**, **paying_customers** (enhanced 2026-03-08)
@@ -220,33 +244,39 @@ Dummy purchase data for revenue tracking. Single product: "Knee Recovery Bundle"
 7. **`v_lifecycle_funnel`** (**NEW 2026-03-08**) — Lifecycle conversion funnel: Leads → Survey Completed → Purchased → Program Active → Completed. Each row has `stage`, `stage_order`, `count`.
 
 ### Row Level Security
-- RLS is **enabled** on all 8 tables (6 original + 2 new)
-- **Anon read policies** on all 8 tables so the dashboard (which uses the anon key) can read data
-- **Anon write policies (added 2026-03-08) for admin actions:**
+- RLS is **enabled** on all 9 tables (6 original + 3 new: daily_progress, purchases, user_notes)
+- **Anon read policies** on all 9 tables so the dashboard (which uses the anon key) can read data
+- **Anon write policies for admin actions:**
   - `anon_update_escalations` ON escalations FOR UPDATE TO anon — allows dashboard to resolve/assign escalations
   - `anon_update_enrollments` ON program_enrollments FOR UPDATE TO anon — allows dashboard to pause/restart/change stage
   - `anon_insert_message_log` ON message_log FOR INSERT TO anon — allows dashboard to log manual messages
+- **Anon write policies for user_notes (added 2026-03-10):**
+  - `anon_insert` ON user_notes FOR INSERT TO anon — allows adding consultation notes from dashboard
+  - `anon_delete` ON user_notes FOR DELETE TO anon — allows deleting notes from dashboard
 - n8n workflows use the `SUPABASE_SERVICE_KEY` which bypasses RLS entirely
 - For production, tighten these policies
 
 ### Migration File
 - **File:** `/Users/paragagrawal/lightyears-health/migrations.sql`
-- **Contains 6 migrations** (run in Supabase SQL Editor):
+- **Contains 8 migrations** (run in Supabase SQL Editor):
   1. Add `city`, `gender` to users; `pain_duration`, `functional_level` to intake_responses
   2. Create `daily_progress` table + RLS
   3. Create `purchases` table + RLS
   4. Drop and recreate all 5 existing views + create 2 new views
   5. Anon write policies for admin actions
   6. Dummy data population (city/gender, pain_duration/functional_level, purchases, 84 days of daily_progress)
-- **Status:** All 6 migrations have been run successfully in Supabase (as of 2026-03-08)
+  7. *(number skipped)*
+  8. Create `user_notes` table + RLS (added 2026-03-10)
+- **Status:** All migrations have been run successfully in Supabase
+- **Additional dummy data script** (run 2026-03-10): Populates all empty fields — user demographics, intake details, purchases, health_metrics (biweekly pain scores), daily_progress, escalations, and consultation notes. This script is idempotent (safe to re-run).
 
 ---
 
 ## 4. n8n WORKFLOWS
 
-All 6 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with `LY -`.
+All 10 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with `LY -`.
 
-**Current state (as of 2026-03-08): ALL 6 workflows are ACTIVE**
+**Current state (as of 2026-03-10): ALL 10 workflows are ACTIVE** (6 original + 4 new scheduled message workflows)
 
 **Critical: ALL `$env.` references have been replaced with `$vars.`** across all 16 nodes in all 6 workflows. n8n Cloud does not allow `$env` — use `$vars.VARIABLE_NAME` for any n8n environment variable.
 
@@ -256,13 +286,15 @@ All 6 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with 
 - **Trigger:** Webhook at `https://parag16.app.n8n.cloud/webhook/ly-intake`
   - Path changed from `lightyears-intake` to `ly-intake` — the old path was stuck in a broken registration state. The intake-form.html has been updated to match.
 - **Purpose:** Receives intake form submissions, classifies the user, creates records in Supabase
-- **Nodes (6):**
+- **Nodes (8):** *(was 6, updated 2026-03-10 to send enrollment confirmation WhatsApp)*
   1. `Receive Form Submission` (Webhook) - POST endpoint, `responseMode: onReceived`
-  2. `Classify User` (Code, nodeId: `code1`) - Determines stage + eligibility based on pain score and medical history. **Updated 2026-03-08:** Now also parses `city`, `gender`, `painDuration`, `functionalLevel` from body and includes in output.
-  3. `Create User in Supabase` (HTTP Request, nodeId: `http_create_user`) - POST to /rest/v1/users. **Updated 2026-03-08:** Now includes `city` and `gender` in JSON body.
+  2. `Classify User` (Code, nodeId: `code1`) - Determines stage + eligibility based on pain score and medical history. Now also parses `city`, `gender`, `painDuration`, `functionalLevel` from body.
+  3. `Create User in Supabase` (HTTP Request, nodeId: `http_create_user`) - POST to /rest/v1/users. Includes `city` and `gender`.
   4. `Prepare Intake + Enrollment Data` (Code) - Formats data for both tables
-  5. `Store Intake Responses` (HTTP Request, nodeId: `http_create_intake`) - POST to /rest/v1/intake_responses. **Updated 2026-03-08:** Now includes `pain_duration` and `functional_level` in JSON body.
+  5. `Store Intake Responses` (HTTP Request, nodeId: `http_create_intake`) - POST to /rest/v1/intake_responses. Includes `pain_duration` and `functional_level`.
   6. `Create Program Enrollment` (HTTP Request) - POST to /rest/v1/program_enrollments
+  7. `Send Enrollment Confirmation via Interakt` (HTTP Request) - **NEW 2026-03-10** — POST to Interakt API, template `program_enrollment_confirmation` with IMAGE header, `onError: continueRegularOutput`
+  8. `Log Enrollment Message` (HTTP Request) - **NEW 2026-03-10** — POST to Supabase message_log
 
 - **Key webhook node settings (critical for registration to work):**
   - `typeVersion: 2.1`
@@ -330,6 +362,36 @@ All 6 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with 
 - **Simulated data:** Pain scores: 6→5→4→4→3→2, Adherence: 80%→85%→85%→90%→90%→95%
 - **Nodes (6):** Manual → Set Phone → Find Enrollment → Simulate Data → Insert Metrics → Mark Completed
 
+### Workflow 7: LY - Daily Exercise Delivery (**NEW 2026-03-10**)
+- **ID:** `FV3Km4IeHQkq1hsL`
+- **Status:** ACTIVE
+- **Trigger:** Schedule - Every day at 7:00 AM
+- **Purpose:** Sends daily exercise video link via WhatsApp to active/enrolled users
+- **Template:** `day_x_exercise_delivery` (IMAGE header)
+- **Nodes (5):** Schedule → Get Active Enrollments → Build Message per User → Send via Interakt → Log Message
+- **Supabase query:** `status=in.(enrolled,active)&select=*,users(*)`
+
+### Workflow 8: LY - Daily Program Reminder (**NEW 2026-03-10**)
+- **ID:** `0TC7ytshEQB8vQPj`
+- **Status:** ACTIVE
+- **Trigger:** Schedule - Every day at 6:00 PM
+- **Purpose:** Sends daily motivation/reminder via WhatsApp
+- **Template:** `daily_program_reminder` (TEXT header — `headerValues: ["Knee Recovery"]`)
+- **Nodes (5):** Schedule → Get Active Enrollments → Build Message per User → Send via Interakt → Log Message
+
+### Workflow 9: LY - Weekly Yoga Session Delivery (**NEW 2026-03-10**)
+- **ID:** `GOc5dn6fgvDS9cb4`
+- **Status:** ACTIVE
+- **Trigger:** Schedule - Every Sunday at 8:00 AM
+- **Purpose:** Sends weekly yoga session link via WhatsApp
+- **Template:** `weekly_yoga_session_delivery` (NO header — no headerValues needed)
+- **Nodes (5):** Schedule → Get Active Enrollments → Build Message per User → Send via Interakt → Log Message
+
+### Workflow 3 (Biweekly Check-in) Update
+- **Template changed to:** `progress_checkin` (TEXT header — `headerValues: ["Knee Recovery"]`)
+- **Enrollment filter updated:** `status=in.(enrolled,active)` (was `status=eq.active`)
+- **Note:** Filter temporarily includes week 1 for testing — should be reverted to weeks 2,4,6,8,10,12 only for production
+
 ---
 
 ## 5. FRONTEND FILES
@@ -353,10 +415,10 @@ All 6 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with 
 - **Fallback:** If the webhook fails, classifies locally using the same logic
 - Shows a personalized result screen with exercise tier recommendation after submission
 
-### File: `dashboard.html` (CRM Dashboard — **REBUILT 2026-03-08**)
+### File: `dashboard.html` (CRM Dashboard — **REBUILT 2026-03-08, UPDATED 2026-03-10**)
 - **Live URL:** https://paavaniagrawal.github.io/lightyears-health/dashboard.html
 - **Local path:** `/Users/paragagrawal/lightyears-health/dashboard.html`
-- **829 lines** — Complete single-page application with hash-based routing
+- **902 lines** — Complete single-page application with hash-based routing
 - **Connects directly to Supabase** using the anon key (no n8n in between)
 - Uses Tailwind CSS CDN, Chart.js 4.4.1, Supabase JS v2
 
@@ -386,7 +448,15 @@ All 6 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with 
 - Profile info card (name, phone, email, city, gender, age, source)
 - Program status card (stage badge, status badge, week X/12, start date, expected end)
 - Intake survey card (pain score, pain location, limitations, comorbidities, goals, blood markers, pain duration, functional level)
+- Flags card (high pain severity, comorbidities, severe limitation)
 - Purchase history
+- **Consultation Notes card** (**NEW 2026-03-10**):
+  - Add note form (textarea + author name input, default "Nutritionist")
+  - Notes list with author, timestamp, full text (whitespace-pre-wrap for multiline)
+  - Delete button (x) with confirm() dialog per note
+  - Note count badge in header
+  - Scrollable (max-h-80) for many notes
+  - JS functions: `addNote(userId)`, `deleteNote(noteId)`
 - **Admin action buttons:**
   - Pause Program / Restart Program (toggles based on current status)
   - Change Stage (dropdown: pain_management, recovery, strengthening)
@@ -400,7 +470,7 @@ All 6 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with 
 5. **VIEW RENDERERS** — `renderOverview()`, `renderOperations()`, `renderClinical()`, `renderConversion()`, `renderUsers()`, `renderUserProfile()`, `renderEscalations()`, `renderMessages()`
 6. **FILTER FUNCTIONS** — `filterUsers()`, `filterEsc()` for client-side filtering
 7. **EXPORT FUNCTIONS** — `exportUsers()`, `exportPurchases()`, `exportEsc()`, `exportMsgs()` — CSV downloads
-8. **ADMIN ACTIONS** — `adminAction(userId, action)` (pause/restart/drop/changeStage), `assignEsc(id)`, `resolveEsc(id)`, `addEscNote(id)`
+8. **ADMIN ACTIONS** — `adminAction(userId, action)` (pause/restart/drop/changeStage), `assignEsc(id)`, `resolveEsc(id)`, `addEscNote(id)`, `addNote(userId)`, `deleteNote(noteId)`
 9. **CHART MANAGEMENT** — `state.charts` object, `destroyAllCharts()` on route change
 10. **INIT** — Router setup, initial data load, auto-refresh every 60 seconds (when tab visible)
 
@@ -418,7 +488,11 @@ All 6 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with 
 [n8n: LY - Intake Form Processor]
         |
         v (HTTP requests)
-[Supabase: creates user (with city, gender) + intake_response (with pain_duration, functional_level) + program_enrollment with status='enrolled']
+[Supabase: creates user + intake_response + program_enrollment with status='enrolled']
+        |
+        v (sends WhatsApp)
+[Interakt: sends enrollment confirmation via template program_enrollment_confirmation]
+[Supabase: logs message in message_log]
         |
         v (form shows result page)
 [Customer sees their exercise tier recommendation]
@@ -450,6 +524,27 @@ All 6 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with 
 [If pain >= 8 or increased by 2+: creates escalation in escalations table]
 
 
+[Every day at 7am - "LY - Daily Exercise Delivery"]
+        |
+        v
+[Sends exercise video link to all active/enrolled users via WhatsApp]
+[Uses template: day_x_exercise_delivery (IMAGE header)]
+
+
+[Every day at 6pm - "LY - Daily Program Reminder"]
+        |
+        v
+[Sends motivational reminder to all active/enrolled users via WhatsApp]
+[Uses template: daily_program_reminder (TEXT header)]
+
+
+[Every Sunday at 8am - "LY - Weekly Yoga Session Delivery"]
+        |
+        v
+[Sends yoga session link to all active/enrolled users via WhatsApp]
+[Uses template: weekly_yoga_session_delivery (no header)]
+
+
 [Every day at midnight - "LY - Lifecycle Manager"]
         |
         v
@@ -461,8 +556,8 @@ All 6 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with 
         |
         v (direct Supabase queries using anon key)
 [Reads from views: v_program_summary, v_pain_score_trend, v_checkin_completion, v_escalation_queue, v_active_programs, v_user_profiles, v_lifecycle_funnel]
-[Also reads directly from: program_enrollments, intake_responses, health_metrics, message_log, daily_progress, purchases, escalations, users]
-[Writes (admin actions): escalations (resolve/assign/note), program_enrollments (pause/restart/stage change)]
+[Also reads directly from: program_enrollments, intake_responses, health_metrics, message_log, daily_progress, purchases, escalations, users, user_notes]
+[Writes (admin actions): escalations (resolve/assign/note), program_enrollments (pause/restart/stage change), user_notes (add/delete consultation notes)]
 ```
 
 ---
@@ -495,20 +590,24 @@ All 6 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with 
 | 22 | Admin actions in dashboard | DONE | 2026-03-08 | Pause/restart program, change stage, resolve/assign/note escalations |
 | 23 | CSV export | DONE | 2026-03-08 | Export from Users, Purchases, Escalations, Messages views |
 | 24 | Push all changes to GitHub | DONE | 2026-03-08 | Commits: b1594f8 (full rebuild), ac106aa (migration fix) |
+| 25 | Wire enrollment confirmation to WF1 | DONE | 2026-03-10 | Added 2 nodes: Send Enrollment Confirmation via Interakt + Log Enrollment Message |
+| 26 | Push LY logo to GitHub Pages | DONE | 2026-03-10 | `/assets/ly-logo.png` — resolves 404 for Interakt image headers |
+| 27 | Create 4 scheduled WhatsApp workflows | DONE | 2026-03-10 | Daily Exercise, Daily Reminder, Weekly Yoga, updated Biweekly Check-in |
+| 28 | Debug & fix all 5 WhatsApp templates | DONE | 2026-03-10 | Fixed IMAGE vs TEXT header types, enrollment status filter, 404 image URL |
+| 29 | Add Consultation Notes feature | DONE | 2026-03-10 | user_notes table + dashboard UI (add/delete notes in user profile) |
+| 30 | Populate dummy data for all empty fields | DONE | 2026-03-10 | User demographics, intake details, purchases, health metrics, daily progress, escalations, consultation notes |
 
 ---
 
 ## 8. WHAT STILL NEEDS TO BE DONE
 
 ### Immediate (Verify & Fix)
-1. **Verify dashboard loads correctly** — Open https://paavaniagrawal.github.io/lightyears-health/dashboard.html and check all 7 tabs + user profile page. Ensure data loads from Supabase and charts render.
-2. **Test admin actions** — Try resolving an escalation, pausing a program, clicking a user row to see their profile.
-3. **Update PROJECT_CONTEXT.md on GitHub** — The local file has been updated but needs to be pushed.
+1. **Revert biweekly check-in week 1 test filter** — WF3 (Biweekly Check-in Sender) was temporarily modified to include week 1 for testing. Revert to only weeks 2,4,6,8,10,12 before production.
+2. **Test on mobile** — Dashboard and intake form should be responsive.
 
 ### For a Polished Demo
-1. **Replace placeholder image in WF2** — The welcome WhatsApp uses a generic placeholder image.
-2. **Test on mobile** — Dashboard and intake form should be responsive.
-3. **Clear demo data before boss demo** — Truncate all tables and start fresh.
+1. **Clear demo data before boss demo** — Truncate all tables and start fresh, then re-run intake form + dummy data script.
+2. **Verify all 4 scheduled workflows fire on schedule** — They've been tested manually; confirm cron triggers work.
 
 ### Nice to Have (Post-Demo)
 - Connect real Shopify purchase webhook to trigger activation automatically
@@ -516,8 +615,8 @@ All 6 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with 
 - Add authentication to the dashboard (currently open to anyone with the URL)
 - Build proper exercise video hosting/linking
 - Real Interakt webhook integration for inbound messages
-- Draft and register proper WhatsApp templates
 - Content management tab for exercise videos per tier
+- Add edit capability to consultation notes (currently only add/delete)
 
 ---
 
@@ -551,6 +650,16 @@ All 6 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with 
 
 11. **n8n MCP**: Use `mcp__n8n-mcp-cloud__` tools (for parag16.app.n8n.cloud), NOT `mcp__n8n-mcp__` (which connects to a different self-hosted instance).
 
+12. **Interakt silent delivery failures**: Interakt API returns `result: true` even when WhatsApp will silently fail to deliver. Causes include: wrong header type (sending image URL for a TEXT header), 404 image URL for an IMAGE header. Always verify the template's header type in Interakt before configuring headerValues.
+
+13. **n8n Cloud URL prefix `=`**: Expression-enabled fields in n8n nodes (like HTTP Request URL) need the `=` prefix for expressions to evaluate. Removing it breaks Supabase queries silently (returns 0 results).
+
+14. **n8n `addConnection` MCP syntax**: Uses `source`/`target` objects (NOT `from`/`to`). Example: `{"source": {"node": "NodeA", "output": "main", "index": 0}, "target": {"node": "NodeB", "input": "main", "index": 0}}`.
+
+15. **Supabase PostgREST `in` filter**: For multiple values use `status=in.(enrolled,active)` — parentheses required.
+
+16. **PostgreSQL `EXTRACT(WEEK FROM interval)`**: Not supported. Use `EXTRACT(DAY FROM interval)::int / 7` instead.
+
 ---
 
 ## 10. FILE STRUCTURE
@@ -559,9 +668,11 @@ All 6 workflows live on **https://parag16.app.n8n.cloud** and are prefixed with 
 /Users/paragagrawal/lightyears-health/     (local source, also GitHub repo)
   index.html                                Landing page
   intake-form.html                          Customer-facing intake assessment (updated 2026-03-08)
-  dashboard.html                            CRM Dashboard - 8-view SPA (rebuilt 2026-03-08)
-  migrations.sql                            Database migrations for new tables/views (added 2026-03-08)
+  dashboard.html                            CRM Dashboard - 8-view SPA (rebuilt 2026-03-08, updated 2026-03-10)
+  migrations.sql                            Database migrations (8 migrations, last added 2026-03-10)
   PROJECT_CONTEXT.md                        This file
+  assets/
+    ly-logo.png                             LightYears Health logo (added 2026-03-10, used in WhatsApp image headers)
 
 /Users/paragagrawal/Downloads/
   lightyears_schema.sql                     Original database schema (already executed)
@@ -676,6 +787,8 @@ If you are an AI assistant picking up this project:
 8. **Dashboard is a single-file SPA** with hash routing. All 8 views are in one `dashboard.html` file. No build step needed.
 9. **Use `$vars.` not `$env.`** for all n8n environment variable references.
 10. **Dashboard uses `db` not `supabase`** as the Supabase client variable name.
-11. **Interakt template `wa_superusers_250925`** requires `headerValues` array with an image URL.
+11. **5 WhatsApp templates** are registered — see the Interakt section for the full table with header types and headerValues. Critical: IMAGE headers need image URLs, TEXT headers need text values, sending the wrong type causes silent delivery failure.
 12. **Team members for escalation assignment:** Abha, Dr. Devashree (hardcoded in dashboard.html).
 13. **Single product:** "Knee Recovery Bundle" at Rs 3,500 (in `purchases` table).
+14. **10 n8n workflows** (6 original + 4 new scheduled message workflows). All ACTIVE. IDs listed in Section 4.
+15. **Biweekly check-in filter** is temporarily set to include week 1 for testing. Revert before production.
