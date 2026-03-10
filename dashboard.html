@@ -59,7 +59,7 @@ const TEAM = ['Abha', 'Dr. Devashree'];
 // ============================================================
 // STATE
 // ============================================================
-const state = { route: 'overview', userId: null, charts: {} };
+const state = { route: 'overview', userId: null, charts: {}, selectedUsers: new Set() };
 
 // ============================================================
 // UTILITIES
@@ -448,11 +448,13 @@ async function renderUsers(app){
         <select id="fSt" onchange="filterUsers()" class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white"><option value="">All Statuses</option><option value="active">Active</option><option value="completed">Completed</option><option value="enrolled">Enrolled</option><option value="dropped_off">Dropped Off</option></select>
         <select id="fSg" onchange="filterUsers()" class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white"><option value="">All Stages</option><option value="pain_management">Pain Management</option><option value="recovery">Recovery</option><option value="strengthening">Strengthening</option></select>
         <input type="text" id="fSr" onkeyup="filterUsers()" placeholder="Search name or phone..." class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white w-48">
+        <button id="delUsersBtn" onclick="deleteSelectedUsers()" class="hidden text-xs px-3 py-1.5 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 font-medium">Delete Selected</button>
         <button onclick="exportUsers()" class="ml-auto text-xs px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100">Export CSV</button>
     </div>
     <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div class="px-6 py-3 border-b border-gray-100"><span class="text-xs text-gray-400" id="uCnt">${profiles.length} users</span></div>
         <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-50"><tr>
+            <th class="px-3 py-3 w-8"><input type="checkbox" id="selectAllUsers" onchange="toggleSelectAll()" class="w-4 h-4 rounded text-blue-600"></th>
             <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Name</th>
             <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Phone</th>
             <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">City</th>
@@ -473,6 +475,9 @@ async function renderUsers(app){
     filterUsers();
 }
 function filterUsers(){
+    state.selectedUsers.clear();
+    updateDeleteBtn();
+    const sa=document.getElementById('selectAllUsers');if(sa)sa.checked=false;
     const st=document.getElementById('fSt')?.value||'';
     const sg=document.getElementById('fSg')?.value||'';
     const sr=(document.getElementById('fSr')?.value||'').toLowerCase();
@@ -482,10 +487,12 @@ function filterUsers(){
         if(sr&&!(p.name||'').toLowerCase().includes(sr)&&!(p.phone||'').includes(sr))return false;
         return true;
     });
+    window._visibleUserIds=data.map(p=>p.user_id);
     const c=document.getElementById('uCnt');if(c)c.textContent=data.length+' users';
     const tb=document.getElementById('uTb');if(!tb)return;
-    if(!data.length){tb.innerHTML=ER(10,'No users match filters');return;}
+    if(!data.length){tb.innerHTML=ER(11,'No users match filters');return;}
     tb.innerHTML=data.map(p=>`<tr class="hover:bg-gray-50 cursor-pointer" onclick="navigateTo('user/${p.user_id}')">
+        <td class="px-3 py-3" onclick="event.stopPropagation()"><input type="checkbox" class="w-4 h-4 rounded text-blue-600 userCb" data-uid="${p.user_id}" onchange="toggleUserSelect('${p.user_id}')" ${state.selectedUsers.has(p.user_id)?'checked':''}></td>
         <td class="px-6 py-3 font-medium text-gray-900">${p.name||'-'}</td>
         <td class="px-6 py-3 text-gray-500 text-xs">${p.phone||'-'}</td>
         <td class="px-6 py-3 text-gray-500 text-xs">${p.city||'-'}</td>
@@ -499,6 +506,43 @@ function filterUsers(){
     </tr>`).join('');
 }
 function exportUsers(){const d=window._usersData||[];csvExport('users.csv',['Name','Phone','City','Stage','Status','Week','Baseline','Latest','Adherence%','Enrolled'],d.map(p=>[p.name,p.phone,p.city,stageLabel[p.stage]||p.stage,p.enrollment_status,p.current_week,p.intake_pain_score,p.latest_pain,p.adherence_pct,p.created_at]));}
+
+function toggleUserSelect(uid){
+    if(state.selectedUsers.has(uid))state.selectedUsers.delete(uid);else state.selectedUsers.add(uid);
+    updateDeleteBtn();
+    const sa=document.getElementById('selectAllUsers');
+    if(sa)sa.checked=window._visibleUserIds&&window._visibleUserIds.length>0&&window._visibleUserIds.every(id=>state.selectedUsers.has(id));
+}
+function toggleSelectAll(){
+    const ids=window._visibleUserIds||[];
+    const allSelected=ids.length>0&&ids.every(id=>state.selectedUsers.has(id));
+    if(allSelected){ids.forEach(id=>state.selectedUsers.delete(id));}else{ids.forEach(id=>state.selectedUsers.add(id));}
+    document.querySelectorAll('.userCb').forEach(cb=>{cb.checked=state.selectedUsers.has(cb.dataset.uid);});
+    updateDeleteBtn();
+}
+function updateDeleteBtn(){
+    const btn=document.getElementById('delUsersBtn');if(!btn)return;
+    const n=state.selectedUsers.size;
+    if(n>0){btn.classList.remove('hidden');btn.textContent='Delete Selected ('+n+')';}else{btn.classList.add('hidden');}
+}
+async function deleteSelectedUsers(){
+    const ids=[...state.selectedUsers];
+    if(!ids.length)return;
+    if(!confirm('Delete '+ids.length+' user(s) and all their data? This cannot be undone.'))return;
+    const btn=document.getElementById('delUsersBtn');
+    if(btn){btn.disabled=true;btn.textContent='Deleting...';}
+    const errors=[];
+    const childTables=[{table:'health_metrics',col:'user_id'},{table:'message_log',col:'user_id'},{table:'escalations',col:'user_id'},{table:'program_enrollments',col:'user_id'}];
+    for(const {table,col} of childTables){
+        const {error}=await db.from(table).delete().in(col,ids);
+        if(error)errors.push(table+': '+error.message);
+    }
+    if(errors.length){alert('Failed to delete related data:\n'+errors.join('\n')+'\n\nUser records were NOT deleted.');if(btn){btn.disabled=false;updateDeleteBtn();}return;}
+    const {error}=await db.from('users').delete().in('id',ids);
+    if(error){alert('Failed to delete users: '+error.message);if(btn){btn.disabled=false;updateDeleteBtn();}return;}
+    state.selectedUsers.clear();
+    handleRoute();
+}
 
 // ============================================================
 // VIEW: USER PROFILE
